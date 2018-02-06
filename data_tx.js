@@ -5,6 +5,24 @@
 // lbccoin-cli listunspent | jq -r '.[0]'
 
 var lbc_api = require('bitcoin');
+var sha256 = require('sha256')
+var fs = require('fs');
+
+if (process.argv.length != 3) {
+  console.log("usage: data_tx.js <message> <file>");
+  return;
+}
+
+var file = process.argv[2];
+// TODO 
+// check lbccoind running
+// prefix data - var message = "SHA256:" + file + "=";
+
+var data = fs.readFileSync(file);
+var hash = sha256(data);
+
+console.log("File: " + file) 
+console.log("Hash: " + hash)
 
 var client = new lbc_api.Client({
   host: 'localhost',
@@ -17,12 +35,12 @@ var client = new lbc_api.Client({
 
 client.listUnspent(function(err, txs) {
   if (err) console.log(err);
-  // find a valie utxo
+  // find a valid utxo
   for (i = 0; i < txs.length; ++i)
   {
     if (txs[i].spendable)
     {
-      console.log(txs[i]);
+      console.log("got UTXO");
       break;
     } 
   }
@@ -34,21 +52,21 @@ client.listUnspent(function(err, txs) {
 
   // rawtx=$(lbccoin-cli -named createrawtransaction inputs='''[ { "txid": "'$utxo_txid'", "vout": '$utxo_vout' } ]''' outputs='''{ "data": "'$op_return_data'", "'$changeaddress'": 4.9 }''')
   txinputs = [{ "txid": txs[i].txid, "vout": txs[i].vout }]
-  txoutput = { "data": "0123456789abcdeffedcba9876543210"}
+  txoutput = { "data": /*message +*/ hash }
   txoutput[changeaddress] = change;
 
   client.createRawTransaction(txinputs, txoutput, function(err, rawtx) {
     if (err) return console.log(err);
-    console.log(rawtx);
+    console.log("got raw tx");
 
     client.cmd('signrawtransaction', rawtx, function(err, signedrawtx) {
       if (err) return console.log(err);
-      console.log(signedrawtx);
+      console.log("signed raw tx");
       if (!signedrawtx.complete)
         console.log("TX not ready");
       else {
         client.cmd('sendrawtransaction', signedrawtx.hex, function(err, result) {
-          console.log(result);
+          console.log("Recorded in TX:", result);
         });
       }
     });

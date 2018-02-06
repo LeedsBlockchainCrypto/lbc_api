@@ -13,7 +13,7 @@ var client = new lbc_api.Client({
 });
 
 
-// not sure what 2nd arg does
+// all addrs (*) with >=6 confs 
 client.getBalance('*', 6, function(err, balance) {
   if (err) console.log(err);
   console.log('Balance: ' + balance);
