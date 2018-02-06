@@ -1,24 +1,24 @@
 
+// export LBC_USER=<user>
+// export LBC_PASS=<pass>
+
 var lbc_api = require('bitcoin');
 
 var client = new lbc_api.Client({
   host: 'localhost',
   port: 9936,
-  user: 'user',
-  pass: 'password',
+  user: process.env.LBC_USER,
+  pass: process.env.LBC_PASS,
   timeout: 30000
 });
 
 
+// not sure what 2nd arg does
 client.getBalance('*', 6, function(err, balance) {
   if (err) console.log(err);
   console.log('Balance: ' + balance);
 });
 
-client.getNetworkHashRate(function(err, hashps) {
- if (err) console.log(err);
- console.log('Network Hash Rate: ' + hashps);
-});
 
 client.listUnspent(function(err, unspent) {
   if (err) console.log(err);
