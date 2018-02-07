@@ -5,28 +5,35 @@ Interacting with your local lbccoin node to, e.g.:
 - automate transactions
 - Create and execute multisig and/or data transactions
 
-Ensure you have lbccoind or lbccoin-qt running
+### Prerequisites
+
+You have lbccoind or lbccoin-qt running and you've enabled JSON-RPC (on localhost at least). Set the env vars
+```
+$ export LBC_USER=<user>
+$ export LBC_PASS=<pass>
+```
+with the username/password you specified in `lbccoin.conf`.
 
 ### Dependencies:
 ```
-npm install bitcoin
+$ npm install bitcoin sha256
 ```
 See [node-bitcoin](https://github.com/freewil/node-bitcoin)
 
 ### Testing 
 First try with:
 ```
-curl -u user:password --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getbalance", "params": [] }' -H 'content-type: text/plain;' http://127.0.0.1:9936/
+$ curl -u $LBC_USER:$LBC_PASS --data-binary '{"jsonrpc": "1.0", "id":"curltest", "method": "getbalance", "params": [] }' -H 'content-type: text/plain;' http://127.0.0.1:9936/
 ```
 which should return something like 
 ```
 {"result":826.29407591,"error":null,"id":"curltest"}
 ```
-if you've set up JSON-RPC and got the credentials right. If you get an error, likely JSON-RPC is not enabled in lbccoind.conf, if you get nothing back likely user/pass is wrong.
+if you've set up JSON-RPC and got the credentials right. If you get an error, likely JSON-RPC is not enabled in `lbccoin.conf`, if you get nothing back likely user/pass is wrong.
 
 Then run
 ```
-nodejs test.js
+$ nodejs test.js
 ```
 # Data Transactions
 These are 'OP_RETURN' transactions that store up to 80 bytes of data in the blockchain. In the example the data payload is the name of a document and its hash (SHA256). In other words you can publically register posession of a document (e.g. a patent, business plan, etc) *without revealing the content*: 
@@ -56,3 +63,6 @@ Mined on Wed Feb 07 2018 14:08:07 GMT+0000 (GMT)
 Confirmations:1
 </pre>
 and thus prove you had the document all the time. 
+
+There are commercial sites that provide this service, e.g. [Proof of Existence](https://poex.io/) which uses bitcoin.
+
