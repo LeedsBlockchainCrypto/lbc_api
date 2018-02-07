@@ -9,6 +9,11 @@ if (process.argv.length != 3) {
   return;
 }
 
+if (!("LBC_USER" in process.env) || !("LBC_PASS" in process.env)) {
+  console.log("Set your lbccoind JSON RPC credentials in LBC_USER and LBC_PASS");
+  return;
+}
+
 var txid = process.argv[2];
 
 var client = new lbc_api.Client({
@@ -22,7 +27,6 @@ var client = new lbc_api.Client({
 
 client.getTransaction(txid, function(err, tx) {
   if (err) return console.log(err);
-  //console.log(hexToString(tx.hex));
   
   preamble = utils.stringToHex("SHA256:");
   loc = tx.hex.indexOf(preamble);

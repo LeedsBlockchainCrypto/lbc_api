@@ -14,6 +14,11 @@ if (process.argv.length != 3) {
   return;
 }
 
+if (!("LBC_USER" in process.env) || !("LBC_PASS" in process.env)) {
+  console.log("Set your lbccoind JSON RPC credentials in LBC_USER and LBC_PASS");
+  return;
+}
+
 var file = process.argv[2];
 // TODO 
 // check lbccoind running
@@ -52,9 +57,7 @@ client.listUnspent(function(err, txs) {
   change = txs[i].amount - fee;
 
   client.cmd('getaccountaddress', "", function(err, changeaddress) {
-    //changeaddress='YkRvYkqkbrEC8SBKWbqvtcySPCtZP4EVur';
     console.log("change address: " + changeaddress)
-    // rawtx=$(lbccoin-cli -named createrawtransaction inputs='''[ { "txid": "'$utxo_txid'", "vout": '$utxo_vout' } ]''' outputs='''{ "data": "'$op_return_data'", "'$changeaddress'": 4.9 }''')
     txinputs = [{ "txid": txs[i].txid, "vout": txs[i].vout }]
     txoutput = { "data": prefix + hash }
     txoutput[changeaddress] = change;
@@ -70,6 +73,7 @@ client.listUnspent(function(err, txs) {
           console.log("TX not ready");
         else {
           client.cmd('sendrawtransaction', signedrawtx.hex, function(err, result) {
+            if (err) return console.log(err);
             console.log("Recorded in TX:", result);
           });
         }
