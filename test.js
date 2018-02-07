@@ -1,4 +1,5 @@
 
+// Ensure youve defined these:
 // export LBC_USER=<user>
 // export LBC_PASS=<pass>
 
