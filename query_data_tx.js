@@ -4,6 +4,9 @@ var lbc_api = require('bitcoin');
 var sha256 = require('sha256')
 var fs = require('fs');
 
+preamble = utils.stringToHex("SHA256:");
+
+
 if (process.argv.length != 3) {
   console.log("usage: query_data_tx.js <txid>");
   return;
@@ -25,22 +28,30 @@ var client = new lbc_api.Client({
 });
 
 
-client.getTransaction(txid, function(err, tx) {
+client.cmd("getrawtransaction", txid, true, function(err, tx) {
   if (err) return console.log(err);
-  
-  preamble = utils.stringToHex("SHA256:");
-  loc = tx.hex.indexOf(preamble);
-  if (loc == -1) {
-    return console.log("tx does not contain data payload")
+
+  for (var i = 0; i < tx.vout.length; ++i) {
+    script = tx.vout[i].scriptPubKey.asm;
+    if (script.substr(0,9) == "OP_RETURN") {
+      console.log(script);
+      loc = script.indexOf(preamble);
+      if (loc == -1) {
+        return console.log("tx contains unrecognised data payload")
+      }
+      filestart = loc + 14; // chars in hex representation of "SHA256:"
+      fileend = script.indexOf(utils.stringToHex("="), filestart);
+      filename  = utils.hexToString(script.substr(filestart, fileend - filestart));
+      hash = script.substr(fileend + 2, 64)
+      //console.log(script.substr(10,14));
+      console.log(filename + " SHA256:" + hash);
+      console.log("Registered on " + new Date(tx.time * 1000));
+      console.log("Mined on " + new Date(tx.blocktime * 1000));
+      console.log("Confirmations:" + tx.confirmations);
+      break;
+    }
   }
-  filestart = loc + 14; // chars in hex representation of "SHA256:"
-  fileend = tx.hex.indexOf(utils.stringToHex("="), filestart);
-  filename  = utils.hexToString(tx.hex.substr(filestart, fileend - filestart));
-  hash = tx.hex.substr(fileend + 2, 64)
-
-  console.log(filename + " SHA256:" + hash);
-  console.log("Registered on " + new Date(tx.time * 1000));
-  console.log("Mined on " + new Date(tx.blocktime * 1000));
-  console.log("Confirmations:" + tx.confirmations);
-
+  if (i == tx.vout.length) {
+    console.log("tx does not have a data payload")
+  }
 });
