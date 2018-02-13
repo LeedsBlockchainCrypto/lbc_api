@@ -35,11 +35,10 @@ amount = 1;
 fee = 0.001
 var change_address = "Yfo9ecAifmFCtobv1pXV1LrrySdAxP95Kp";
 var return_address = "YkRvYkqkbrEC8SBKWbqvtcySPCtZP4EVur";
-// TODO return address
 
-var pubkeys = ["YhKYwEejHwWCXNvtKzZtVddLBMZegS4fTi","YdzMEPzKpyxvWNznTPJbs5d85DpBaZcniu"];
-
-var prvkeys = ["TBGJUsit7e8BS4fcJC16LQUBi9TKqYLjcvksdWzSWYffENQc6WTk", "T99mRbDNN9eB1Y4Z3jenjBMCLta5rkSegz2GaCjMFBy9nfsHFfAn"];
+// some randomly generated keys and their wifs
+var pubkeys = ["0273cb3dd42509b4f872f5d7e44ffa9bdd3c2000c01329bacac7e3ad41bc1f0b17","03bf301b47845126b908bffe71d09668e29211daf4e5bbb77a43e0f1622f579984"];
+var prvkeys = ["TAJWsuEQAHfPYSTk9dyqgMZBzJLLdspP8TkyHAGFNyEkPgiEqNyC", "T9wB7cCpgd6yFbL62AYUe8Z5MYezT7cGvZwuCwMmMXcjDbckE5pj"];
 var requiredSignatures = 2;
 
 client.cmd('listunspent', function(err, txs) {
@@ -47,7 +46,7 @@ client.cmd('listunspent', function(err, txs) {
   // find a valid utxo
   for (i = 0; i < txs.length; ++i)
   {
-    if (txs[i].spendable && txs[i].amount > amount + 2 * fee)
+    if (txs[i].spendable && txs[i].amount > (amount + 2 * fee))
     {
       console.log("got UTXO for " + txs[i].amount);
       break;
@@ -56,9 +55,8 @@ client.cmd('listunspent', function(err, txs) {
   if (i == txs.length)
     return console.log("cant find spendable TX")
 
-  //console.log(txs[i]);
   // change
-  change = txs[i].amount - amount - 2 * fee;
+  change = (txs[i].amount - amount - 2 * fee).toFixed(6);
 
   client.cmd("createmultisig", requiredSignatures, pubkeys, function(err, multisig) {
     if (err) return console.log(err);
@@ -76,11 +74,11 @@ client.cmd('listunspent', function(err, txs) {
         if (err) return console.log(err);
         //console.log("signedtx:",signedfundtx) 
         //fs.writeFileSync("./funding.hex", signedfundtx.hex);
+        if (!signedfundtx.complete)
+          return console.log("funding tx not ready");
         client.cmd('sendrawtransaction', signedfundtx.hex, function(err, result) {
           if (err) return console.log(err);
           console.log("P2SH fund tx:", result);
-          if (!signedfundtx.complete)
-            return console.log("funding tx not ready");
           client.cmd("decoderawtransaction", signedfundtx.hex, function(err, decodedfundtx) {
             if (err) return console.log(err);
             fundtxid = decodedfundtx.txid;
