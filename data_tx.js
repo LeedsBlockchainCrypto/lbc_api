@@ -38,46 +38,63 @@ var client = new lbc_api.Client({
   timeout: 30000
 });
 
+// global variable to hold UTXO so that callback can access it (there's probably a better way but I'm no js expert)
+utxo = {};
+fee = 0.01;
 
-client.listUnspent(function(err, txs) {
+
+function confirmTx(err, result) {
+  if (err) return console.log(err);
+  console.log("Recorded in TX:", result);
+}
+
+function checkAndSendTx(err, signedrawtx) {
+  if (err) return console.log(err);
+  console.log("signed raw tx");
+  if (!signedrawtx.complete)
+    console.log("TX not ready");
+  else {
+    client.cmd('sendrawtransaction', signedrawtx.hex, confirmTx);
+  }
+}
+
+function signTx(err, rawtx) {
+  if (err) return console.log(err);
+  console.log("got raw tx");
+
+  client.cmd('signrawtransaction', rawtx, checkAndSendTx);
+}
+
+function createTx(err, changeaddress) {
+  console.log("change address: " + changeaddress)
+  txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
+  txoutput = { "data": prefix + hash }
+  txoutput[changeaddress] = change;
+
+  client.createRawTransaction(txinputs, txoutput, signTx);
+}
+
+function findFunds(err, utxos) {
   if (err) return console.log(err);
   // find a valid utxo
-  for (i = 0; i < txs.length; ++i)
+  for (i = 0; i < utxos.length; ++i)
   {
-    if (txs[i].spendable)
+    if (utxos[i].spendable && utxos[i].amount >= fee)
     {
       console.log("got UTXO");
       break;
     } 
   }
-  if (i == txs.length)
-    return console.log("cant find spendable TX")
+  if (i == utxos.length)
+    return console.log("cant find spendable UTXO")
 
-  fee = 0.01
-  change = txs[i].amount - fee;
+  utxo = utxos[i];
 
-  client.cmd('getaccountaddress', "", function(err, changeaddress) {
-    console.log("change address: " + changeaddress)
-    txinputs = [{ "txid": txs[i].txid, "vout": txs[i].vout }]
-    txoutput = { "data": prefix + hash }
-    txoutput[changeaddress] = change;
+  // FP (im)precision can cause odd errors
+  change = (utxos[i].amount - fee).toFixed(6);;
 
-    client.createRawTransaction(txinputs, txoutput, function(err, rawtx) {
-      if (err) return console.log(err);
-      console.log("got raw tx");
+  client.cmd('getaccountaddress', "", createTx);
+}
 
-      client.cmd('signrawtransaction', rawtx, function(err, signedrawtx) {
-        if (err) return console.log(err);
-        console.log("signed raw tx");
-        if (!signedrawtx.complete)
-          console.log("TX not ready");
-        else {
-          client.cmd('sendrawtransaction', signedrawtx.hex, function(err, result) {
-            if (err) return console.log(err);
-            console.log("Recorded in TX:", result);
-          });
-        }
-      });
-    });
-  });
-});
+
+client.listUnspent(findFunds);
