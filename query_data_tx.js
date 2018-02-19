@@ -37,14 +37,16 @@ client.cmd("getrawtransaction", txid, true, function(err, tx) {
       console.log(script);
       loc = script.indexOf(preamble);
       if (loc == -1) {
-        return console.log("tx contains unrecognised data payload")
+        console.log("tx contains unrecognised data payload:", script);
+        console.log("utf-8:", utils.hexToString(script.substr(10)));
+      } else {
+        filestart = loc + 14; // chars in hex representation of "SHA256:"
+        fileend = script.indexOf(utils.stringToHex("="), filestart);
+        filename  = utils.hexToString(script.substr(filestart, fileend - filestart));
+        hash = script.substr(fileend + 2, 64)
+        //console.log(script.substr(10,14));
+        console.log(filename + " SHA256:" + hash);
       }
-      filestart = loc + 14; // chars in hex representation of "SHA256:"
-      fileend = script.indexOf(utils.stringToHex("="), filestart);
-      filename  = utils.hexToString(script.substr(filestart, fileend - filestart));
-      hash = script.substr(fileend + 2, 64)
-      //console.log(script.substr(10,14));
-      console.log(filename + " SHA256:" + hash);
       console.log("Registered on " + new Date(tx.time * 1000));
       console.log("Mined on " + new Date(tx.blocktime * 1000));
       console.log("Confirmations:" + tx.confirmations);

@@ -39,7 +39,7 @@ var client = new lbc_api.Client({
 });
 
 // global variable to hold UTXO so that callback can access it (there's probably a better way but I'm no js expert)
-utxo = {};
+//utxo = {};
 fee = 0.01;
 
 
@@ -66,6 +66,7 @@ function signTx(err, rawtx) {
 }
 
 function createTx(err, changeaddress) {
+  //console.log(utxo);
   console.log("change address: " + changeaddress)
   txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
   txoutput = { "data": prefix + hash }
@@ -91,7 +92,7 @@ function findFunds(err, utxos) {
   utxo = utxos[i];
 
   // FP (im)precision can cause odd errors
-  change = (utxos[i].amount - fee).toFixed(6);;
+  change = (utxos[i].amount - fee).toFixed(6);
 
   client.cmd('getaccountaddress', "", createTx);
 }
