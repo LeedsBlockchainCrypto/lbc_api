@@ -1,4 +1,4 @@
-
+'use strict'
 //op_return_data=$(sha256sum $1 | cut -f 1 -d" ")
 
 // Find some money to spend
@@ -22,10 +22,13 @@ if (!("LBC_USER" in process.env) || !("LBC_PASS" in process.env)) {
 var file = process.argv[2];
 // TODO 
 // check lbccoind running
-prefix = utils.stringToHex("SHA256:" + utils.basename(file) + "=");
+var prefix = utils.stringToHex("SHA256:" + utils.basename(file) + "=");
 
 var data = fs.readFileSync(file);
 var hash = sha256(data);
+
+var utxo;
+var change;
 
 console.log("File: " + file) 
 console.log("SHA-256: " + hash)
@@ -40,7 +43,7 @@ var client = new lbc_api.Client({
 
 // global variable to hold UTXO so that callback can access it (there's probably a better way but I'm no js expert)
 //utxo = {};
-fee = 0.01;
+var fee = 0.01;
 
 
 function confirmTx(err, result) {
@@ -68,8 +71,8 @@ function signTx(err, rawtx) {
 function createTx(err, changeaddress) {
   //console.log(utxo);
   console.log("change address: " + changeaddress)
-  txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
-  txoutput = { "data": prefix + hash }
+  var txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
+  var txoutput = { "data": prefix + hash }
   txoutput[changeaddress] = change;
 
   client.createRawTransaction(txinputs, txoutput, signTx);
@@ -78,7 +81,7 @@ function createTx(err, changeaddress) {
 function findFunds(err, utxos) {
   if (err) return console.log(err);
   // find a valid utxo
-  for (i = 0; i < utxos.length; ++i)
+  for (var i = 0; i < utxos.length; ++i)
   {
     if (utxos[i].spendable && utxos[i].amount >= fee)
     {
