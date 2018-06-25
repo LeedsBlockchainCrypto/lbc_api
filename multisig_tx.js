@@ -1,4 +1,4 @@
-
+'use strict'
 // 
 
 var utils = require('./utils.js')
@@ -24,17 +24,16 @@ var client = new lbc_api.Client({
   timeout: 30000
 });
 
+var payload = "";
 if (process.argv.length ==3) {
-  payload = utils.stringToHex(process.argv[2]);
+  var payload = utils.stringToHex(process.argv[2]);
   console.log("Payload: " + process.argv[2] + ":" + payload)
-} else {
-  payload = "";
 }
 
-amount = 1;
-fee = 0.001
-var change_address = "Yfo9ecAifmFCtobv1pXV1LrrySdAxP95Kp";
-var return_address = "Ym73CnRoDSaS34q3eisULGs1xCQwWTp6zU";
+var amount = 1;
+var fee = 0.001
+var change_address = "YnYXkCVT7fDfz4A12WNtfyKo3dzGQLdG83";
+var return_address = "YSWDgr4qH7q1BxVBHvdWDv5h2JPYqN8ePb";
 
 // some randomly generated keys and their wifs
 var pubkeys = ["0273cb3dd42509b4f872f5d7e44ffa9bdd3c2000c01329bacac7e3ad41bc1f0b17","03bf301b47845126b908bffe71d09668e29211daf4e5bbb77a43e0f1622f579984"];
@@ -44,7 +43,7 @@ var requiredSignatures = 2;
 client.cmd('listunspent', function findFunds(err, txs) {
   if (err) return console.log(err);
   // find a valid utxo
-  for (i = 0; i < txs.length; ++i)
+  for (var i = 0; i < txs.length; ++i)
   {
     if (txs[i].spendable && txs[i].amount > (amount + 2 * fee))
     {
@@ -56,14 +55,14 @@ client.cmd('listunspent', function findFunds(err, txs) {
     return console.log("cant find spendable TX")
 
   // change
-  change = (txs[i].amount - amount - 2 * fee).toFixed(6);
+  var change = (txs[i].amount - amount - 2 * fee).toFixed(6);
 
   client.cmd("createmultisig", requiredSignatures, pubkeys, function makeFund(err, multisig) {
     if (err) return console.log(err);
     //console.log(multisig);
 
-    funding_in = [{"txid" : txs[i].txid,"vout": txs[i].vout}];
-    funding_out = {};
+    var funding_in = [{"txid" : txs[i].txid,"vout": txs[i].vout}];
+    var funding_out = {};
     funding_out[multisig["address"]] = amount + fee;
     funding_out[change_address] = change;
     //console.log(funding_out);
@@ -75,30 +74,29 @@ client.cmd('listunspent', function findFunds(err, txs) {
       client.cmd("signrawtransaction", rawfundtx, function signFund(err, signedfundtx) {
         if (err) return console.log(err);
         //console.log("signedtx:",signedfundtx) 
-        //fs.writeFileSync("./funding.hex", signedfundtx.hex);
         if (!signedfundtx.complete)
           return console.log("funding tx not ready");
+        fs.writeFileSync("./funding.hex", signedfundtx.hex);
 
         client.cmd("decoderawtransaction", signedfundtx.hex, function makeP2sh(err, decodedfundtx) {
           if (err) return console.log(err);
-          fundtxid = decodedfundtx.txid;
+          var fundtxid = decodedfundtx.txid;
           console.log("P2SH addr:", multisig.address);
           //console.log(JSON.stringify(decodedfundtx, undefined, 2));
           // work out the output we're spending in the P2SH (i.e. not the change)
-          for (vout_index = 0; vout_index <  decodedfundtx.vout.length; ++vout_index) {
+          for (var vout_index = 0; vout_index <  decodedfundtx.vout.length; ++vout_index) {
             // TODO multiple addresses?
             if (multisig["address"] == decodedfundtx.vout[vout_index].scriptPubKey.addresses[0])
               break;
           }
 
-          p2sh_in = [{"txid": fundtxid, 
+          var p2sh_in = [{"txid": fundtxid, 
                       "vout": vout_index, 
                       "scriptPubKey": decodedfundtx.vout[0].scriptPubKey.hex, // ??
                       "redeemScript": multisig.redeemScript }];
+          var p2sh_out = {}
           // data payload...
-          if (!payload.length) {
-            p2sh_out = {}
-          } else {
+          if (payload.length) {
             p2sh_out = { "data": payload };
           }
 
@@ -120,10 +118,10 @@ client.cmd('listunspent', function findFunds(err, txs) {
                 if (err) return console.log(err);
                 console.log(signed_raw_p2sh.complete ? "fully signed" : "more sigs required");
                 fs.writeFileSync("./p2sh2.hex", signed_raw_p2sh.hex);
-                // client.cmd('decoderawtransaction', signed_raw_p2sh.hex, function(err, result) {
-                //   if (err) return console.log(err);
-                //   console.log(JSON.stringify(result, undefined, 2));
-                // });                                
+                client.cmd('decoderawtransaction', signed_raw_p2sh.hex, function(err, result) {
+                  if (err) return console.log(err);
+                  console.log(JSON.stringify(result, undefined, 2));
+                });                                
 
                 client.cmd('sendrawtransaction', signedfundtx.hex, function sendFund(err, result) {
                   if (err) return console.log(err);
