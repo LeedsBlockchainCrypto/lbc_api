@@ -41,25 +41,6 @@ var client = new lbc_api({
 //utxo = {};
 var fee = 0.01;
 
-// Gets a utxo that cover the TX and the fee...
-// TODO This should be able to aggregate multiple utxos
-async function get_funds(payment, fee) {
-
-  // Get all UTXOs
-  const utxos = await client.listUnspent();
-
-  // Find a suitable utxo to use
-  for (var i = 0; i < utxos.length; ++i)
-  {
-    if (utxos[i].spendable && utxos[i].amount >= payment + fee)
-    {
-      console.log("got UTXO");
-      return [utxos[i]];
-    } 
-  }
-  return [];
-}
-
 async function get_opreturn_tx(utxo, payload, changeaddress, change) {
   var txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
   var txoutput = { "data": payload }
@@ -68,19 +49,10 @@ async function get_opreturn_tx(utxo, payload, changeaddress, change) {
 }
 
 
-async function send_tx_checked(signedrawtx) {
-  // check ready
-  if (!signedrawtx.complete) {
-    console.log("TX not ready");
-    return "";
-  }
-  return /*await*/ client.sendRawTransaction(signedrawtx.hex);
-}
-
 (async () => {
 
   // utxo = utxos[i]; 
-  const utxos = await get_funds(0, fee);
+  const utxos = await utils.get_funds(client, 0, fee);
 
   if (!utxos.length)
     return console.log("cant find spendable UTXO")
@@ -101,7 +73,7 @@ async function send_tx_checked(signedrawtx) {
   const signedrawtx = await client.signRawTransaction(rawtx);
 
   // check and send
-  const txhash = await send_tx_checked(signedrawtx);
+  const txhash = await utils.send_tx_checked(client, signedrawtx);
 
   console.log("Recorded in TX:", txhash);
 

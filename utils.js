@@ -1,3 +1,32 @@
+'use strict'
+
+// Gets a utxo that cover the TX and the fee...
+// TODO This should be able to aggregate multiple utxos
+async function get_funds(api, payment, fee) {
+
+  // Get all UTXOs
+  const utxos = await api.listUnspent();
+
+  // Find a suitable utxo to use
+  for (var i = 0; i < utxos.length; ++i)
+  {
+    if (utxos[i].spendable && utxos[i].amount >= payment + fee)
+    {
+      console.log("got UTXO");
+      return [utxos[i]];
+    } 
+  }
+  return [];
+}
+
+async function send_tx_checked(api, signedrawtx) {
+  // check ready
+  if (!signedrawtx.complete) {
+    console.log("TX not ready");
+    return "";
+  }
+  return /*await*/ api.sendRawTransaction(signedrawtx.hex);
+}
 
 module.exports = {
 
@@ -22,3 +51,11 @@ basename: function(str) {
 }
 
 };
+
+// export the async function
+module.exports.get_funds = get_funds;
+module.exports.send_tx_checked = send_tx_checked;
+
+
+
+
