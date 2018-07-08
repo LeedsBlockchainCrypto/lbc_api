@@ -1,8 +1,4 @@
 'use strict'
-//op_return_data=$(sha256sum $1 | cut -f 1 -d" ")
-
-// Find some money to spend
-// lbccoin-cli listunspent | jq -r '.[0]'
 
 var utils = require('./utils.js')
 var lbc_api = require('bitcoin-core');
@@ -47,27 +43,7 @@ var fee = 0.01;
 
 // Gets a utxo that cover the TX and the fee...
 // TODO This should be able to aggregate multiple utxos
-// function get_funds(payment, fee) {
-
-//   // Get all UTXOs
-//   const utxos = await client.listUnspent();
-
-//   // Find a suitable utxo to use
-//   for (var i = 0; i < utxos.length; ++i)
-//   {
-//     if (utxos[i].spendable && utxos[i].amount >= payment + fee)
-//     {
-//       console.log("got UTXO");
-//       return utxos[i];
-//     } 
-//   }
-//   return undefined;
-// }
-
-
-(async () => {
-  //const balance = await client.getBalance('*', 0);
-  //console.log(balance);
+async function get_funds(payment, fee) {
 
   // Get all UTXOs
   const utxos = await client.listUnspent();
@@ -75,41 +51,57 @@ var fee = 0.01;
   // Find a suitable utxo to use
   for (var i = 0; i < utxos.length; ++i)
   {
-    if (utxos[i].spendable && utxos[i].amount >= fee)
+    if (utxos[i].spendable && utxos[i].amount >= payment + fee)
     {
       console.log("got UTXO");
-      break;
+      return [utxos[i]];
     } 
   }
+  return [];
+}
 
-  if (i == utxos.length)
+async function get_opreturn_tx(utxo, payload, changeaddress, change) {
+  var txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
+  var txoutput = { "data": payload }
+  txoutput[changeaddress] = change;
+  return /*await*/ client.createRawTransaction(txinputs, txoutput);
+}
+
+
+async function send_tx_checked(signedrawtx) {
+  // check ready
+  if (!signedrawtx.complete) {
+    console.log("TX not ready");
+    return "";
+  }
+  return /*await*/ client.sendRawTransaction(signedrawtx.hex);
+}
+
+(async () => {
+
+  // utxo = utxos[i]; 
+  const utxos = await get_funds(0, fee);
+
+  if (!utxos.length)
     return console.log("cant find spendable UTXO")
 
-  utxo = utxos[i]; //get_funds(0, fee);
+  const utxo = utxos[0];
 
   // FP (im)precision can cause odd errors
   change = (utxo.amount - fee).toFixed(6);
 
   // Get change address
   const changeaddress = await client.getAccountAddress("");
+  console.log("change address: " + changeaddress);
 
   // Create TX
-  console.log("change address: " + changeaddress)
-  var txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
-  var txoutput = { "data": prefix + hash }
-  txoutput[changeaddress] = change;
-  const rawtx = await client.createRawTransaction(txinputs, txoutput);
+  const rawtx = await get_opreturn_tx(utxo, prefix + hash, changeaddress, change);
 
   // signTx
   const signedrawtx = await client.signRawTransaction(rawtx);
-  //console.log(signedrawtx);
 
-  //, checkAndSendTx);
-  if (!signedrawtx.complete) {
-    return console.log("TX not ready");
-  }
-
-  const txhash = await client.sendRawTransaction(signedrawtx.hex);
+  // check and send
+  const txhash = await send_tx_checked(signedrawtx);
 
   console.log("Recorded in TX:", txhash);
 
