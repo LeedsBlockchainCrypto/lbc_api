@@ -5,7 +5,7 @@
 // lbccoin-cli listunspent | jq -r '.[0]'
 
 var utils = require('./utils.js')
-var lbc_api = require('bitcoin');
+var lbc_api = require('bitcoin-core');
 var sha256 = require('sha256');
 var fs = require('fs');
 
@@ -33,11 +33,11 @@ var change;
 console.log("File: " + file) 
 console.log("SHA-256: " + hash)
 
-var client = new lbc_api.Client({
-  host: 'localhost',
+var client = new lbc_api({
+  //host: 'localhost',
   port: 9936,
-  user: process.env.LBC_USER,
-  pass: process.env.LBC_PASS,
+  username: process.env.LBC_USER,
+  password: process.env.LBC_PASS,
   timeout: 30000
 });
 
@@ -45,42 +45,34 @@ var client = new lbc_api.Client({
 //utxo = {};
 var fee = 0.01;
 
+// Gets a utxo that cover the TX and the fee...
+// TODO This should be able to aggregate multiple utxos
+// function get_funds(payment, fee) {
 
-function confirmTx(err, result) {
-  if (err) return console.log(err);
-  console.log("Recorded in TX:", result);
-}
+//   // Get all UTXOs
+//   const utxos = await client.listUnspent();
 
-function checkAndSendTx(err, signedrawtx) {
-  if (err) return console.log(err);
-  console.log("signed raw tx");
-  if (!signedrawtx.complete)
-    console.log("TX not ready");
-  else {
-    client.cmd('sendrawtransaction', signedrawtx.hex, confirmTx);
-  }
-}
+//   // Find a suitable utxo to use
+//   for (var i = 0; i < utxos.length; ++i)
+//   {
+//     if (utxos[i].spendable && utxos[i].amount >= payment + fee)
+//     {
+//       console.log("got UTXO");
+//       return utxos[i];
+//     } 
+//   }
+//   return undefined;
+// }
 
-function signTx(err, rawtx) {
-  if (err) return console.log(err);
-  console.log("got raw tx");
 
-  client.cmd('signrawtransaction', rawtx, checkAndSendTx);
-}
+(async () => {
+  //const balance = await client.getBalance('*', 0);
+  //console.log(balance);
 
-function createTx(err, changeaddress) {
-  //console.log(utxo);
-  console.log("change address: " + changeaddress)
-  var txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
-  var txoutput = { "data": prefix + hash }
-  txoutput[changeaddress] = change;
+  // Get all UTXOs
+  const utxos = await client.listUnspent();
 
-  client.createRawTransaction(txinputs, txoutput, signTx);
-}
-
-function findFunds(err, utxos) {
-  if (err) return console.log(err);
-  // find a valid utxo
+  // Find a suitable utxo to use
   for (var i = 0; i < utxos.length; ++i)
   {
     if (utxos[i].spendable && utxos[i].amount >= fee)
@@ -89,16 +81,36 @@ function findFunds(err, utxos) {
       break;
     } 
   }
+
   if (i == utxos.length)
     return console.log("cant find spendable UTXO")
 
-  utxo = utxos[i];
+  utxo = utxos[i]; //get_funds(0, fee);
 
   // FP (im)precision can cause odd errors
-  change = (utxos[i].amount - fee).toFixed(6);
+  change = (utxo.amount - fee).toFixed(6);
 
-  client.cmd('getaccountaddress', "", createTx);
-}
+  // Get change address
+  const changeaddress = await client.getAccountAddress("");
 
+  // Create TX
+  console.log("change address: " + changeaddress)
+  var txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
+  var txoutput = { "data": prefix + hash }
+  txoutput[changeaddress] = change;
+  const rawtx = await client.createRawTransaction(txinputs, txoutput);
 
-client.listUnspent(findFunds);
+  // signTx
+  const signedrawtx = await client.signRawTransaction(rawtx);
+  //console.log(signedrawtx);
+
+  //, checkAndSendTx);
+  if (!signedrawtx.complete) {
+    return console.log("TX not ready");
+  }
+
+  const txhash = await client.sendRawTransaction(signedrawtx.hex);
+
+  console.log("Recorded in TX:", txhash);
+
+})();
