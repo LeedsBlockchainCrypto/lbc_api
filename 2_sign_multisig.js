@@ -40,7 +40,6 @@ const prvkey = [process.argv[3]];
 
     const decoded_raw_p2sh = await client.decodeRawTransaction(record.auth.raw);
 
-    //fs.writeFileSync("./auth_" + txhash + ".json", JSON.stringify(signed_raw_p2sh));
     record.auth["tx"] = txhash;
     console.log("Signed and executed: ", txhash);
 
