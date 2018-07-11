@@ -6,7 +6,7 @@ var lbc_api = require('bitcoin-core');
 var fs = require('fs');
 
 if (process.argv.length != 3) {
-  console.log("usage: 3_exec_multisig.js <signed_rawtx>");
+  console.log("usage: 3_check_multisig.js <record>");
   return;
 }
 

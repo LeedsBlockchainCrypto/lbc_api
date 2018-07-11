@@ -43,6 +43,7 @@ var fee = 0.01;
 
 async function get_opreturn_tx(utxo, payload, changeaddress, change) {
   var txinputs = [{ "txid": utxo.txid, "vout": utxo.vout }]
+  //console.log(txinputs);
   var txoutput = { "data": payload }
   txoutput[changeaddress] = change;
   return /*await*/ client.createRawTransaction(txinputs, txoutput);

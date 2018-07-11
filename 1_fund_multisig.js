@@ -1,5 +1,4 @@
 'use strict'
-// 
 
 var utils = require('./utils.js');
 var lbc_api = require('bitcoin-core');
@@ -7,7 +6,7 @@ var sha256 = require('sha256');
 var fs = require('fs');
 
 if (process.argv.length < 4) {
-  console.log("usage: nodejs " + process.argv[1] + " N PK0 PK1...");
+  console.log("usage: nodejs " + process.argv[1] + " record PK0 PK1...");
   return;
 }
 
@@ -24,29 +23,32 @@ var client = new lbc_api({
 });
 
 
-const amount = 1;
-const fee = 0.01;
-const change_address = "YYMjBpnujHoHkd5xC9w8LhB3WQ7LhjDjnp";
-
-// some randomly generated keys and their wifs
-//const pubkeys = ["0273cb3dd42509b4f872f5d7e44ffa9bdd3c2000c01329bacac7e3ad41bc1f0b17","03bf301b47845126b908bffe71d09668e29211daf4e5bbb77a43e0f1622f579984"];
-//const prvkeys = ["TAJWsuEQAHfPYSTk9dyqgMZBzJLLdspP8TkyHAGFNyEkPgiEqNyC", "T9wB7cCpgd6yFbL62AYUe8Z5MYezT7cGvZwuCwMmMXcjDbckE5pj"];
-
-// TODO json input...
-const payload = utils.stringToHex("Testing 1 2 3 ...");
-
-var requiredSignatures = parseInt(process.argv[2]);
+var record_file = process.argv[2];
 
 var pubkeys = [process.argv[3], process.argv[4]];
 for (var i = 5; i < process.argv.length; ++i) {
   pubkeys.push(process.argv[i]);
 }
+// TODO remove hard-coded N/N auth, 1/N deny
+const req_sigs = pubkeys.length
 
-console.log(requiredSignatures + "/" + pubkeys.length, pubkeys);
+console.log(req_sigs + "/" + pubkeys.length, pubkeys);
 
 (async () => {
 
-  const utxos = await utils.get_funds(client, amount + fee, fee);
+  // TODO configurable - json input...
+  var record = { "pubkeys": pubkeys,
+                 "payload": utils.stringToHex("Testing 1 2 3 ..."),
+                 "auths": req_sigs, 
+                 "denys": 1,
+                 "deposit": 1,
+                 "fee": 0.01,
+                 "change_address": "YYMjBpnujHoHkd5xC9w8LhB3WQ7LhjDjnp",                  
+                 "fund": {},
+                 "auth": {},
+                 "deny": {} }
+
+  const utxos = await utils.get_funds(client, record.deposit + record.fee, record.fee);
 
   if (!utxos.length)
     return console.log("cant find spendable UTXO")
@@ -54,60 +56,57 @@ console.log(requiredSignatures + "/" + pubkeys.length, pubkeys);
   const utxo = utxos[0];
 
   // FP (im)precision can cause odd errors
-  const change = (utxo.amount - amount - 3 * fee).toFixed(6);
-
-  // Get change address
-  const changeaddress = await client.getAccountAddress("");
-  console.log("change address: " + changeaddress);
+  const change = (utxo.amount - record.deposit - 3 * record.fee).toFixed(6);
 
   // all signatories enter into a contract
-  const auth = await client.createMultiSig(requiredSignatures, pubkeys);  
+  record.auth = await client.createMultiSig(req_sigs, pubkeys);  
+  console.log("P2SH auth addr:", record.auth.address);
+
   // any one signatory can nullifies it
-  const deny = await client.createMultiSig(1, pubkeys);
-  
+  record.deny = await client.createMultiSig(1, pubkeys);
+  console.log("P2SH deny addr:", record.deny.address);
+
+  // Create TX to fund the auth address
   const funding_in = [{"txid": utxo.txid, "vout": utxo.vout}];
   var funding_out = {};
-  funding_out[auth["address"]] = (amount + 2 * fee).toFixed(6);
-  funding_out[change_address] = change;
-  //console.log(funding_out);
-
+  funding_out[record.auth["address"]] = (record.deposit + 2 * record.fee).toFixed(6);
+  funding_out[record.change_address] = change;
   const rawfundtx = await client.createRawTransaction(funding_in, funding_out); 
-  
-  //function createFund(err, rawfundtx) {
-  //console.log("rawtx:",rawfundtx);
 
+  // Sign it
   const signedfundtx = await client.signRawTransaction(rawfundtx);
  
+  // Send it
   const fundtxhash = await utils.send_tx_checked(client, signedfundtx); 
   console.log("P2SH fund tx:", fundtxhash);
+  record.fund["tx"] = fundtxhash;
 
+  // Create inputs for the next stage
   const decodedfundtx  = await client.decodeRawTransaction(signedfundtx.hex);
-  fs.writeFileSync("fund_" + fundtxhash + ".json", JSON.stringify(decodedfundtx, undefined, 2));
-  
   const fundtxid = decodedfundtx.txid;
-  console.log("P2SH auth addr:", auth.address);
-  console.log("P2SH deny addr:", deny.address);
+
   //console.log(JSON.stringify(decodedfundtx, undefined, 2));
   // work out the output we're spending in the P2SH (i.e. not the change)
   for (var vout_index = 0; vout_index <  decodedfundtx.vout.length; ++vout_index) {
     // TODO multiple addresses?
-    if (auth["address"] == decodedfundtx.vout[vout_index].scriptPubKey.addresses[0])
+    if (record.auth["address"] == decodedfundtx.vout[vout_index].scriptPubKey.addresses[0])
       break;
   }
 
-  const auth_in = [{"txid": fundtxid, 
-                    "vout": vout_index, 
-                    "scriptPubKey": decodedfundtx.vout[0].scriptPubKey.hex, // ??
-                    "redeemScript": auth.redeemScript }];
+  record.auth["inputs"] = [{"txid": fundtxid, 
+                            "vout": vout_index, 
+                            "scriptPubKey": decodedfundtx.vout[0].scriptPubKey.hex, // ??
+                            "redeemScript": record.auth.redeemScript }];
+
   // data payload...
-  var auth_out = { "data": payload };
-  auth_out[deny.address] = amount + fee;
+  var auth_out = { "data": record.payload };
+  auth_out[record.deny.address] = record.deposit + record.fee;
 
-  const raw_auth = await client.createRawTransaction(auth_in, auth_out);
+  record.auth["raw"] = await client.createRawTransaction(record.auth["inputs"], auth_out);
 
-  fs.writeFileSync("./auth_in_" + auth.address + ".json", JSON.stringify(auth_in, undefined, 2));
-  //console.log(raw_p2sh);
-  fs.writeFileSync("./" + auth.address + ".hex", raw_auth);
+  console.log("Writing contract record to " + record_file);
+  fs.writeFileSync(record_file, JSON.stringify(record, undefined, 2));
+
 })();
 
 

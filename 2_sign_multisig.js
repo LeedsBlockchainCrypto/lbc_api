@@ -5,8 +5,8 @@ var utils = require('./utils.js')
 var lbc_api = require('bitcoin-core');
 var fs = require('fs');
 
-if (process.argv.length != 5) {
-  console.log("usage: 2_sign_multisig.js <rawtx> <fund_tx> <privatekey>");
+if (process.argv.length != 4) {
+  console.log("usage: 2_sign_multisig.js <record> <privatekey>");
   return;
 }
 
@@ -23,30 +23,34 @@ var client = new lbc_api({
   timeout: 30000
 });
 
-const raw_p2sh_file = process.argv[2];
-const raw_p2sh = fs.readFileSync(raw_p2sh_file, "utf8");
-//console.log(raw_p2sh);
-//console.log(type(raw_p2sh));
-const p2sh_in = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
-const prvkey = [process.argv[4]];
+const record_file = process.argv[2];
+const prvkey = [process.argv[3]];
 
-
-//console.log(prvkey);
 (async () => {
 
-  const decoded_raw_p2sh = await client.decodeRawTransaction(raw_p2sh);
-  //console.log(JSON.stringify(decoded_raw_p2sh, undefined, 2));
-  
-  const signed_raw_p2sh = await client.signRawTransaction(raw_p2sh, p2sh_in, prvkey); 
+  var record = JSON.parse(fs.readFileSync(record_file, "utf8"));
 
+  const signed_raw_p2sh = await client.signRawTransaction(record.auth.raw, record.auth.inputs, prvkey); 
   // write 
-  fs.writeFileSync(raw_p2sh_file, signed_raw_p2sh.hex);
+  record.auth.raw = signed_raw_p2sh.hex;
   
   // if fully signed, execute
   if (signed_raw_p2sh.complete) {
     const txhash = await client.sendRawTransaction(signed_raw_p2sh.hex);
-    fs.writeFileSync("./auth_" + txhash + ".json", JSON.stringify(signed_raw_p2sh));
+
+    const decoded_raw_p2sh = await client.decodeRawTransaction(record.auth.raw);
+
+    //fs.writeFileSync("./auth_" + txhash + ".json", JSON.stringify(signed_raw_p2sh));
+    record.auth["tx"] = txhash;
     console.log("Signed and executed: ", txhash);
+
+    record.deny["inputs"] = [{"txid": txhash, 
+                              "vout": 1, // TODO this index must refer to a spendable output (not op_return)
+                              "scriptPubKey": decoded_raw_p2sh.vout[1].scriptPubKey.hex, // ??
+                              "redeemScript": record.deny.redeemScript }];
   }
+
+  fs.writeFileSync(record_file, JSON.stringify(record, undefined, 2));
+
 })();
 
