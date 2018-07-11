@@ -25,7 +25,7 @@ var client = new lbc_api({
 
 
 const amount = 1;
-const fee = 0.001
+const fee = 0.01;
 const change_address = "YYMjBpnujHoHkd5xC9w8LhB3WQ7LhjDjnp";
 
 // some randomly generated keys and their wifs
@@ -34,7 +34,6 @@ const change_address = "YYMjBpnujHoHkd5xC9w8LhB3WQ7LhjDjnp";
 
 // TODO json input...
 const payload = utils.stringToHex("Testing 1 2 3 ...");
-const return_address = "YYMjBpnujHoHkd5xC9w8LhB3WQ7LhjDjnp";
 
 var requiredSignatures = parseInt(process.argv[2]);
 
@@ -44,7 +43,6 @@ for (var i = 5; i < process.argv.length; ++i) {
 }
 
 console.log(requiredSignatures + "/" + pubkeys.length, pubkeys);
-
 
 (async () => {
 
@@ -56,26 +54,27 @@ console.log(requiredSignatures + "/" + pubkeys.length, pubkeys);
   const utxo = utxos[0];
 
   // FP (im)precision can cause odd errors
-  const change = (utxo.amount - amount - 2 * fee).toFixed(6);
+  const change = (utxo.amount - amount - 3 * fee).toFixed(6);
 
   // Get change address
   const changeaddress = await client.getAccountAddress("");
   console.log("change address: " + changeaddress);
 
-  const multisig = await client.createMultiSig(requiredSignatures, pubkeys);
+  // all signatories enter into a contract
+  const auth = await client.createMultiSig(requiredSignatures, pubkeys);  
+  // any one signatory can nullifies it
+  const deny = await client.createMultiSig(1, pubkeys);
   
-  //console.log(multisig);
-
   const funding_in = [{"txid": utxo.txid, "vout": utxo.vout}];
   var funding_out = {};
-  funding_out[multisig["address"]] = amount + fee;
+  funding_out[auth["address"]] = (amount + 2 * fee).toFixed(6);
   funding_out[change_address] = change;
   //console.log(funding_out);
 
   const rawfundtx = await client.createRawTransaction(funding_in, funding_out); 
   
   //function createFund(err, rawfundtx) {
-  console.log("rawtx:",rawfundtx);
+  //console.log("rawtx:",rawfundtx);
 
   const signedfundtx = await client.signRawTransaction(rawfundtx);
  
@@ -83,30 +82,32 @@ console.log(requiredSignatures + "/" + pubkeys.length, pubkeys);
   console.log("P2SH fund tx:", fundtxhash);
 
   const decodedfundtx  = await client.decodeRawTransaction(signedfundtx.hex);
+  fs.writeFileSync("fund_" + fundtxhash + ".json", JSON.stringify(decodedfundtx, undefined, 2));
   
   const fundtxid = decodedfundtx.txid;
-  console.log("P2SH addr:", multisig.address);
+  console.log("P2SH auth addr:", auth.address);
+  console.log("P2SH deny addr:", deny.address);
   //console.log(JSON.stringify(decodedfundtx, undefined, 2));
   // work out the output we're spending in the P2SH (i.e. not the change)
   for (var vout_index = 0; vout_index <  decodedfundtx.vout.length; ++vout_index) {
     // TODO multiple addresses?
-    if (multisig["address"] == decodedfundtx.vout[vout_index].scriptPubKey.addresses[0])
+    if (auth["address"] == decodedfundtx.vout[vout_index].scriptPubKey.addresses[0])
       break;
   }
 
-  const p2sh_in = [{"txid": fundtxid, 
+  const auth_in = [{"txid": fundtxid, 
                     "vout": vout_index, 
                     "scriptPubKey": decodedfundtx.vout[0].scriptPubKey.hex, // ??
-                    "redeemScript": multisig.redeemScript }];
+                    "redeemScript": auth.redeemScript }];
   // data payload...
-  var p2sh_out = { "data": payload };
+  var auth_out = { "data": payload };
+  auth_out[deny.address] = amount + fee;
 
-  p2sh_out[return_address] = amount;
+  const raw_auth = await client.createRawTransaction(auth_in, auth_out);
 
-  const raw_p2sh = await client.createRawTransaction(p2sh_in, p2sh_out);
-  
+  fs.writeFileSync("./auth_in_" + auth.address + ".json", JSON.stringify(auth_in, undefined, 2));
   //console.log(raw_p2sh);
-  fs.writeFileSync("./" + multisig.address + ".hex", raw_p2sh);
+  fs.writeFileSync("./" + auth.address + ".hex", raw_auth);
 })();
 
 

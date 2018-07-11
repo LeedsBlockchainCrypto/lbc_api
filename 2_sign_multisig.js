@@ -5,8 +5,8 @@ var utils = require('./utils.js')
 var lbc_api = require('bitcoin-core');
 var fs = require('fs');
 
-if (process.argv.length != 4) {
-  console.log("usage: 2_sign_multisig.js <rawtx> <privatekey>");
+if (process.argv.length != 5) {
+  console.log("usage: 2_sign_multisig.js <rawtx> <fund_tx> <privatekey>");
   return;
 }
 
@@ -23,28 +23,30 @@ var client = new lbc_api({
   timeout: 30000
 });
 
-
-var raw_p2sh = fs.readFileSync(process.argv[2], "utf8");
-console.log(raw_p2sh);
+const raw_p2sh_file = process.argv[2];
+const raw_p2sh = fs.readFileSync(raw_p2sh_file, "utf8");
+//console.log(raw_p2sh);
 //console.log(type(raw_p2sh));
-const p2sh_in = undefined;
-const prvkey = [process.argv[3]];
+const p2sh_in = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const prvkey = [process.argv[4]];
 
 
 //console.log(prvkey);
 (async () => {
 
   const decoded_raw_p2sh = await client.decodeRawTransaction(raw_p2sh);
-  console.log(JSON.stringify(decoded_raw_p2sh, undefined, 2));
-
-  const x = 'expected object with {"txid","vout","scriptPubKey"}??';
-  // https://gist.github.com/gavinandresen/3966071
-  const signed_raw_p2sh = await client.signRawTransaction(raw_p2sh, x, prvkey); 
-
-  console.log(signed_raw_p2sh);
-  console.log(signed_raw_p2sh.complete ? "fully signed" : "more sigs required");
-  // sign again 
-  fs.writeFileSync("./signed.hex", signed_raw_p2sh.hex);
+  //console.log(JSON.stringify(decoded_raw_p2sh, undefined, 2));
   
+  const signed_raw_p2sh = await client.signRawTransaction(raw_p2sh, p2sh_in, prvkey); 
+
+  // write 
+  fs.writeFileSync(raw_p2sh_file, signed_raw_p2sh.hex);
+  
+  // if fully signed, execute
+  if (signed_raw_p2sh.complete) {
+    const txhash = await client.sendRawTransaction(signed_raw_p2sh.hex);
+    fs.writeFileSync("./auth_" + txhash + ".json", JSON.stringify(signed_raw_p2sh));
+    console.log("Signed and executed: ", txhash);
+  }
 })();
 
